@@ -139,7 +139,7 @@ func main() {
 				posts = append(posts, Post{
 					Title: postRecord.GetString("title"),
 					Url:   "/blog/" + postRecord.GetString("slug"),
-					Date:  postRecord.GetString("date"),
+					Date:  postRecord.GetDateTime("date").Time().Format("02.01.2006"),
 				})
 			}
 
