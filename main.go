@@ -6,11 +6,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/labstack/echo/v5"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/daos"
+	m "github.com/pocketbase/pocketbase/migrations"
+	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/pocketbase/pocketbase/tools/template"
 )
 
@@ -26,9 +31,26 @@ type Post struct {
 }
 
 func main() {
-	println("Starting ...")
-
 	app := pocketbase.New()
+
+    // loosely check if it was executed using "go run"
+    isGoRun := strings.HasPrefix(os.Args[0], os.TempDir())
+
+    migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
+        // enable auto creation of migration files when making collection changes in the Admin UI
+        // (the isGoRun check is to enable it only during development)
+        Automigrate: isGoRun,
+    })
+
+    m.Register(func(db dbx.Builder) error {
+        dao := daos.New(db)
+
+        settings, _ := dao.FindSettings()
+        settings.Meta.AppName = "Website"
+        settings.Logs.MaxDays = 2
+
+        return dao.SaveSettings(settings)
+    }, nil)
 
 	// serves static files from the provided public dir (if exists)
 	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
