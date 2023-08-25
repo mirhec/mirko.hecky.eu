@@ -33,24 +33,24 @@ type Post struct {
 func main() {
 	app := pocketbase.New()
 
-    // loosely check if it was executed using "go run"
-    isGoRun := strings.HasPrefix(os.Args[0], os.TempDir())
+	// loosely check if it was executed using "go run"
+	isGoRun := strings.HasPrefix(os.Args[0], os.TempDir())
 
-    migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
-        // enable auto creation of migration files when making collection changes in the Admin UI
-        // (the isGoRun check is to enable it only during development)
-        Automigrate: isGoRun,
-    })
+	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
+		// enable auto creation of migration files when making collection changes in the Admin UI
+		// (the isGoRun check is to enable it only during development)
+		Automigrate: isGoRun,
+	})
 
-    m.Register(func(db dbx.Builder) error {
-        dao := daos.New(db)
+	m.Register(func(db dbx.Builder) error {
+		dao := daos.New(db)
 
-        settings, _ := dao.FindSettings()
-        settings.Meta.AppName = "Website"
-        settings.Logs.MaxDays = 2
+		settings, _ := dao.FindSettings()
+		settings.Meta.AppName = "Website"
+		settings.Logs.MaxDays = 2
 
-        return dao.SaveSettings(settings)
-    }, nil)
+		return dao.SaveSettings(settings)
+	}, nil)
 
 	// serves static files from the provided public dir (if exists)
 	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
@@ -72,7 +72,7 @@ func main() {
 				}
 				songs = append(songs, Song{
 					Title: songRecord.GetString("title"),
-					Url:   "/songs/" + songId,
+					Url:   "/songs/" + songRecord.GetString("title"),
 				})
 			}
 
@@ -118,6 +118,33 @@ func main() {
 			return content, nil
 		}
 
+		getFileContentByTitle := func(collection string, title string, fieldName string) ([]byte, error) {
+			record, err := app.Dao().FindFirstRecordByData(collection, "title", title)
+			if err != nil {
+				return nil, err
+			}
+
+			fs, err := app.NewFilesystem()
+			if err != nil {
+				return nil, err
+			}
+			defer fs.Close()
+
+			fileKey := record.BaseFilesPath() + "/" + record.GetString(fieldName)
+			br, err := fs.GetFile(fileKey)
+			if err != nil {
+				return nil, err
+			}
+			defer br.Close()
+
+			content, err := io.ReadAll(br)
+			if err != nil {
+				return nil, err
+			}
+
+			return content, nil
+		}
+
 		e.Router.GET("/slides/:id", func(c echo.Context) error {
 			id := c.PathParam("id")
 			content, err := getFileContent("slides", id, "header_image")
@@ -127,9 +154,9 @@ func main() {
 			return c.Blob(http.StatusOK, "image/jpeg", content)
 		})
 
-		e.Router.GET("/songs/:id", func(c echo.Context) error {
-			id := c.PathParam("id")
-			content, err := getFileContent("songs", id, "mp3")
+		e.Router.GET("/songs/:title", func(c echo.Context) error {
+			title := c.PathParam("title")
+			content, err := getFileContentByTitle("songs", title, "mp3")
 			if err != nil {
 				return err
 			}
